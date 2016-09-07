@@ -25,6 +25,7 @@ import (
 	"math/big"
 	"sort"
 	"sync/atomic"
+    "encoding/hex"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -201,6 +202,9 @@ func doFrom(tx *Transaction, homestead bool) (common.Address, error) {
 	if err != nil {
 		return common.Address{}, err
 	}
+
+    glog.Infof("PUBLIC KEY: %s\n", hex.EncodeToString(pubkey))
+
 	var addr common.Address
 	copy(addr[:], crypto.Keccak256(pubkey[1:])[12:])
 	tx.from.Store(addr)
@@ -233,6 +237,10 @@ func (tx *Transaction) publicKey(homestead bool) ([]byte, error) {
 	// recover the public key from the signature
 	hash := tx.SigHash()
 	pub, err := crypto.Ecrecover(hash[:], sig)
+
+    fmt.Printf("SIGHASH %s\n", hex.EncodeToString(hash.Bytes()))
+    fmt.Printf("SIG     %s\n", hex.EncodeToString(sig))
+
 	if err != nil {
 		glog.V(logger.Error).Infof("Could not get pubkey from signature: ", err)
 		return nil, err

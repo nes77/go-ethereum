@@ -27,6 +27,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+    "bytes"
+//    "encoding/hex"
+    osexec "os/exec"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -47,6 +50,7 @@ import (
 var (
 	chainlogger = logger.NewLogger("CHAIN")
 	jsonlogger  = logger.NewJsonLogger()
+    udgMux = &sync.Mutex{}
 
 	blockInsertTimer = metrics.NewTimer("chain/inserts")
 
@@ -936,6 +940,81 @@ func (self *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 			if err := WriteTransactions(self.chainDb, block); err != nil {
 				return i, err
 			}
+
+            /*
+            if block.Transactions().Len() > 0 {
+                blkbuf := bytes.NewBuffer(nil)
+                block.EncodeRLP(blkbuf)
+                glog.Infof("BLKRLP: %x\n", blkbuf.String())
+
+                t, err := trie.New(block.Root(), self.chainDb)
+
+                if err != nil {
+                    glog.Error("Naughty!")
+                }
+
+                proof := t.Prove(block.Hash().Bytes())
+                proof_val, err := trie.VerifyProof(block.Root(), block.Hash().Bytes(), proof)
+                glog.Infof("Proof Result: %#v, %#v\n", proof_val, err)
+            
+                proof_rlp, err := rlp.EncodeToBytes(proof)
+                glog.Infof("PROOF: %s\n", hex.EncodeToString(proof_rlp))
+
+                if err != nil {
+                     glog.Error("Naughty!")
+                }
+
+                glog.Infof("TRANSACTION: %x\n", block.Transactions()[0].Hash().Bytes())
+                glog.Infof("TRANSACTION RLP: %s\n", hex.EncodeToString(block.Transactions().GetRlp(0)))
+                glog.Infoln("TRANSACTION SIG DATA FOLLOWS")
+                glog.Flush()
+                transaction := block.Transactions()[0]
+                glog.Infof("SIGHASH: %x\n", transaction.SigHash().Str())
+                v, r, s := transaction.SignatureValues()
+                glog.Infof("R: %s\nS: %s\nV: %d\n", hex.EncodeToString(r.Bytes()), hex.EncodeToString(s.Bytes()), v - 27)
+                glog.Flush()
+                glog.Infoln("END TRANSACTION SIG DATA FOR BLOCK\n\n\n")
+            }
+            */
+
+            if block.NumberU64() % 1000 == 0 {
+                fmt.Println(block.NumberU64(), "reached")
+            }
+            c := make(chan bool)
+            go func() {
+                udgMux.Lock()
+                defer udgMux.Unlock()
+                defer func() {
+                    c <- true
+                }()
+
+                if block.Transactions().Len() == 0 {
+                    return
+                }
+
+                glog.Infof("Verifying block #%d with udg-sgx...\n", block.Number())
+                
+                blkbuf := bytes.NewBuffer(nil)
+                block.EncodeRLP(blkbuf)
+        
+                cmd := osexec.Command("./udg", "verify", fmt.Sprintf("%x", blkbuf.String()))
+                cmderr := cmd.Run()
+
+                if cmderr != nil {
+                    glog.Infof("udg-sgx failed verification for #%d with error %s\n", block.Number(), cmderr.Error())
+                    output, _ := cmd.CombinedOutput()
+                    glog.Infof("udg-sgx output:\n%s\n", string(output[:]))
+                    glog.Infof("%x\n", blkbuf.String())
+                    panic(cmderr.Error())
+                } else {
+                    glog.Infof("udg-sgx verified #%d\n", block.Number())
+                }
+
+            }()
+
+            _ = <-c
+
+            
 			// store the receipts
 			if err := WriteReceipts(self.chainDb, receipts); err != nil {
 				return i, err
