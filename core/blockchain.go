@@ -802,6 +802,8 @@ func (self *BlockChain) WriteBlock(block *types.Block) (status WriteStatus, err 
 	return
 }
 
+var blah bool
+
 // InsertChain will attempt to insert the given chain in to the canonical chain or, otherwise, create a fork. It an error is returned
 // it will return the index number of the failing block as well an error describing what went wrong (for possible errors see core/errors.go).
 func (self *BlockChain) InsertChain(chain types.Blocks) (int, error) {
@@ -988,16 +990,17 @@ func (self *BlockChain) InsertChain(chain types.Blocks) (int, error) {
                     c <- true
                 }()
 
-                if block.Transactions().Len() == 0 {
-                    return
-                }
+                //if block.Transactions().Len() == 0 {
+                //    glog.Infoln("Skipping block...")
+                //    return
+                //}
 
-                glog.Infof("Verifying block #%d with udg-sgx...\n", block.Number())
+                glog.Infof("Processing block #%d with udg-sgx...\n", block.Number())
                 
                 blkbuf := bytes.NewBuffer(nil)
                 block.EncodeRLP(blkbuf)
         
-                cmd := osexec.Command("./udg", "verify", fmt.Sprintf("%x", blkbuf.String()))
+                cmd := osexec.Command("./udg", "process", fmt.Sprintf("%x", blkbuf.String()))
                 cmderr := cmd.Run()
 
                 if cmderr != nil {
@@ -1012,7 +1015,7 @@ func (self *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 
             }()
 
-            _ = <-c
+            blah = <-c
 
             
 			// store the receipts
